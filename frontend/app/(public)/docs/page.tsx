@@ -1,17 +1,13 @@
 import PageLayout from "@/components/PageLayout";
-import Sidebar from "@/components/Sidebar";
 import CodeBlock from "@/components/CodeBlock";
 
 export default function Documentation() {
   const sections = [
-    { label: "Getting Started", href: "#getting-started", active: true },
+    { label: "Getting Started", href: "#getting-started" },
     { label: "Installation", href: "#installation" },
     { label: "Quick Start", href: "#quick-start" },
     { label: "API Reference", href: "#api-reference" },
     { label: "Authentication", href: "#authentication" },
-    { label: "Projects", href: "#projects" },
-    { label: "Collaboration", href: "#collaboration" },
-    { label: "Integrations", href: "#integrations" },
     { label: "CLI Tools", href: "#cli-tools" },
     { label: "Troubleshooting", href: "#troubleshooting" }
   ];
@@ -19,8 +15,25 @@ export default function Documentation() {
   return (
     <PageLayout>
       <div className="max-w-7xl mx-auto px-6 py-24 flex gap-12">
-        {/* Sidebar */}
-        <Sidebar items={sections} title="DOCUMENTATION" />
+        {/* Documentation Navigation */}
+        <aside className="w-64 flex-shrink-0">
+          <div className="sticky top-24">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
+              DOCUMENTATION
+            </h3>
+            <nav className="space-y-1">
+              {sections.map((section) => (
+                <a
+                  key={section.href}
+                  href={section.href}
+                  className="block px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  {section.label}
+                </a>
+              ))}
+            </nav>
+          </div>
+        </aside>
 
         {/* Content */}
         <div className="flex-1 max-w-3xl">
