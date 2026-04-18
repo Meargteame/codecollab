@@ -9,6 +9,7 @@ interface CodeEditorProps {
   language: string;
   onChange: (content: string) => void;
   onSave: () => void;
+  onCursorPositionChange?: (position: { line: number; column: number }) => void;
   readOnly?: boolean;
 }
 
@@ -16,7 +17,8 @@ export default function CodeEditor({
   content, 
   language, 
   onChange, 
-  onSave, 
+  onSave,
+  onCursorPositionChange,
   readOnly = false 
 }: CodeEditorProps) {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -32,10 +34,12 @@ export default function CodeEditor({
 
     // Track cursor position
     editor.onDidChangeCursorPosition((e) => {
-      setCursorPosition({
+      const position = {
         line: e.position.lineNumber,
         column: e.position.column,
-      });
+      };
+      setCursorPosition(position);
+      onCursorPositionChange?.(position);
     });
 
     // Focus the editor

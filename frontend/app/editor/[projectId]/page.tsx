@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { EditorProvider, useEditor } from "@/contexts/EditorContext";
 import { CollaborationProvider, useCollaboration } from "@/contexts/CollaborationContext";
+import { UIProvider } from "@/contexts/UIContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ActivityBar } from "@/components/ActivityBar";
 import FileTree from "@/components/FileTree";
 import EditorTabs from "@/components/EditorTabs";
 import CodeEditor from "@/components/CodeEditor";
@@ -11,6 +14,7 @@ import ResizeHandle from "@/components/ResizeHandle";
 import CollaborationSidebar from "@/components/CollaborationSidebar";
 import ChatPanel from "@/components/ChatPanel";
 import ProjectShareModal from "@/components/ProjectShareModal";
+import StatusBar from "@/components/StatusBar";
 
 // Sample file contents
 const fileContents: Record<string, string> = {
@@ -149,6 +153,7 @@ function EditorWorkspaceContent({ projectId }: { projectId: string }) {
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
   const activeTab = openTabs.find(tab => tab.id === activeTabId);
 
@@ -193,15 +198,22 @@ function EditorWorkspaceContent({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* File Tree Sidebar */}
-      <div style={{ width: sidebarWidth }} className="border-r border-white/10 bg-white/[0.02] flex flex-col">
-        <FileTree
-          files={fileTree}
-          activeFileId={activeTab?.fileId || null}
-          onFileSelect={handleFileSelect}
-        />
-      </div>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Activity Bar */}
+        <ActivityBar />
+
+        {/* File Tree Sidebar */}
+        <div 
+          style={{ width: sidebarWidth }} 
+          className="border-r border-white/10 bg-white/[0.02] flex flex-col transition-all duration-250"
+        >
+          <FileTree
+            files={fileTree}
+            activeFileId={activeTab?.fileId || null}
+            onFileSelect={handleFileSelect}
+          />
+        </div>
 
         <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
 
@@ -221,6 +233,7 @@ function EditorWorkspaceContent({ projectId }: { projectId: string }) {
                 language={getLanguage(activeTab.fileName)}
                 onChange={(content) => updateTabContent(activeTab.id, content)}
                 onSave={handleSave}
+                onCursorPositionChange={setCursorPosition}
               />
             ) : (
               <div className="h-full flex items-center justify-center bg-black">
@@ -272,13 +285,26 @@ function EditorWorkspaceContent({ projectId }: { projectId: string }) {
           isConnected={isConnected}
           onInvite={() => setIsShareModalOpen(true)}
         />
+
+        {/* Share Modal */}
+        <ProjectShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          projectId={projectId}
+        />
       </div>
 
-      {/* Share Modal */}
-      <ProjectShareModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        projectId={projectId}
+      {/* Status Bar */}
+      <StatusBar
+        branch="main"
+        cursorPosition={cursorPosition}
+        encoding="UTF-8"
+        lineEnding="LF"
+        language={activeTab ? getLanguage(activeTab.fileName) : 'Plain Text'}
+        indentation={{ type: 'spaces', size: 2 }}
+        errors={0}
+        warnings={0}
+        collaboratorCount={collaborators.filter(c => c.status === 'active').length}
       />
     </div>
   );
@@ -286,10 +312,14 @@ function EditorWorkspaceContent({ projectId }: { projectId: string }) {
 
 export default function EditorWorkspace({ params }: { params: { projectId: string } }) {
   return (
-    <EditorProvider>
-      <CollaborationProvider projectId={params.projectId}>
-        <EditorWorkspaceContent projectId={params.projectId} />
-      </CollaborationProvider>
-    </EditorProvider>
+    <ThemeProvider>
+      <UIProvider>
+        <EditorProvider>
+          <CollaborationProvider projectId={params.projectId}>
+            <EditorWorkspaceContent projectId={params.projectId} />
+          </CollaborationProvider>
+        </EditorProvider>
+      </UIProvider>
+    </ThemeProvider>
   );
 }
