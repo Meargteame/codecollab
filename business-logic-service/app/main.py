@@ -9,6 +9,9 @@ from prometheus_client import make_asgi_app
 from app.config import get_settings
 from app.database import close_db, init_db
 
+# Import router
+from app.api.v1.users import router as users_router
+
 settings = get_settings()
 logger = structlog.get_logger()
 
@@ -16,17 +19,17 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
-    # Startup
     logger.info("Starting CodeCollab Business Logic Service", version=settings.app_version)
-    
-    # Initialize database
+
+    # Import all models so SQLAlchemy's metadata is populated before create_all
+    import app.models  # noqa: F401
+
     if settings.is_development:
         await init_db()
         logger.info("Database initialized")
-    
+
     yield
-    
-    # Shutdown
+
     logger.info("Shutting down CodeCollab Business Logic Service")
     await close_db()
     logger.info("Database connections closed")
@@ -88,11 +91,12 @@ async def root():
     }
 
 
-# TODO: Import and include API routers
-# from app.api.v1 import auth, projects, users, ai, search, billing
+app.include_router(users_router, prefix="/api/v1")
+
+# TODO: Include remaining routers as they are implemented
+# from app.api.v1 import auth, projects, ai, search, billing
 # app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 # app.include_router(projects.router, prefix="/api/v1/projects", tags=["Projects"])
-# app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 # app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 # app.include_router(search.router, prefix="/api/v1/search", tags=["Search"])
 # app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])

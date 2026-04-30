@@ -28,6 +28,7 @@ tenacity = "^8.2.3"
 httpx = "^0.26.0"
 python-dotenv = "^1.0.0"
 email-validator = "^2.1.0"
+itsdangerous = "^2.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.4"
