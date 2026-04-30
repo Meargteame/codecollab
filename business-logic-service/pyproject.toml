@@ -1,0 +1,71 @@
+[tool.poetry]
+name = "codecollab-business-logic"
+version = "0.1.0"
+description = "Business Logic Service for CodeCollab - Authentication, Projects, AI, Billing, Search"
+authors = ["CodeCollab Team"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+sqlalchemy = "^2.0.25"
+alembic = "^1.13.1"
+asyncpg = "^0.29.0"
+psycopg2-binary = "^2.9.9"
+redis = {extras = ["hiredis"], version = "^5.0.1"}
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.6"
+openai = "^1.10.0"
+stripe = "^7.10.0"
+elasticsearch = "^8.11.1"
+prometheus-client = "^0.19.0"
+structlog = "^24.1.0"
+tenacity = "^8.2.3"
+httpx = "^0.26.0"
+python-dotenv = "^1.0.0"
+email-validator = "^2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.4"
+pytest-asyncio = "^0.23.3"
+pytest-cov = "^4.1.0"
+hypothesis = "^6.96.1"
+black = "^24.1.1"
+ruff = "^0.1.14"
+mypy = "^1.8.0"
+httpx = "^0.26.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "property: property-based tests",
+    "integration: integration tests",
+    "e2e: end-to-end tests"
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

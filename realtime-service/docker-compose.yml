@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Real-Time Service
+  realtime-service:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_ADDRESS=:8080
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=codecollab
+      - DB_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/workspaces
+      - JWT_SECRET=development_secret_change_in_production
+    volumes:
+      - ./workspaces:/workspaces
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - codecollab
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=codecollab
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - codecollab
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - codecollab
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  codecollab:
+    driver: bridge
