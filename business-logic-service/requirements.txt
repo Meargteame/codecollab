@@ -1,0 +1,33 @@
+# Generated from pyproject.toml - Use Poetry for dependency management
+# For pip users: pip install -r requirements.txt
+
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+sqlalchemy==2.0.25
+alembic==1.13.1
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+redis[hiredis]==5.0.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+openai==1.10.0
+stripe==7.10.0
+elasticsearch==8.11.1
+prometheus-client==0.19.0
+structlog==24.1.0
+tenacity==8.2.3
+httpx==0.26.0
+python-dotenv==1.0.0
+email-validator==2.1.0
+
+# Development dependencies
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+hypothesis==6.96.1
+black==24.1.1
+ruff==0.1.14
+mypy==1.8.0
