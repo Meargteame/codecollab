@@ -70,6 +70,7 @@ class UserService:
         user = await self._db.get(User, user_id)
         if user is None:
             raise UserError("User not found")
+        await self._db.refresh(user)
         return user
 
     async def get_by_email(self, email: str) -> User:
@@ -88,6 +89,7 @@ class UserService:
         user = result.scalar_one_or_none()
         if user is None:
             raise UserError("User not found")
+        await self._db.refresh(user)
         return user
 
     # ------------------------------------------------------------------
@@ -128,6 +130,8 @@ class UserService:
             details=update_data,
             ctx=ctx,
         )
+        await self._db.flush()
+        await self._db.refresh(user)
         logger.info("user_profile_updated", user_id=str(user_id))
         return user
 
@@ -165,6 +169,8 @@ class UserService:
             details=update_data,
             ctx=ctx,
         )
+        await self._db.flush()
+        await self._db.refresh(user)
         logger.info("admin_user_updated", user_id=str(user_id), actor_id=str(actor_id))
         return user
 
@@ -255,16 +261,15 @@ class UserService:
             raise UserError("Cannot deactivate a deleted user")
 
         user.status = "deactivated"
-
-        # Revoke all active sessions in Redis
         await self._revoke_all_sessions(user_id)
-
         await self._audit(
             action="user.deactivated",
             resource_id=user_id,
             actor_id=actor_id,
             ctx=ctx,
         )
+        await self._db.flush()
+        await self._db.refresh(user)
         logger.info("user_deactivated", user_id=str(user_id), actor_id=str(actor_id))
         return user
 
@@ -287,13 +292,14 @@ class UserService:
             raise UserError("User is not deactivated")
 
         user.status = "active"
-
         await self._audit(
             action="user.reactivated",
             resource_id=user_id,
             actor_id=actor_id,
             ctx=ctx,
         )
+        await self._db.flush()
+        await self._db.refresh(user)
         logger.info("user_reactivated", user_id=str(user_id), actor_id=str(actor_id))
         return user
 
@@ -406,13 +412,14 @@ class UserService:
             raise UserError("Email is already verified")
 
         user.email_verified = True
-
         await self._audit(
             action="user.email_verified",
             resource_id=user.id,
             actor_id=user.id,
-            ctx=None,  # public endpoint — no request context
+            ctx=None,
         )
+        await self._db.flush()
+        await self._db.refresh(user)
         logger.info("user_email_verified", user_id=user_id_str)
         return user
 

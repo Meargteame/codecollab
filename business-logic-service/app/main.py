@@ -9,7 +9,8 @@ from prometheus_client import make_asgi_app
 from app.config import get_settings
 from app.database import close_db, init_db
 
-# Import router
+# Import routers
+from app.api.v1.auth import router as auth_router
 from app.api.v1.users import router as users_router
 
 settings = get_settings()
@@ -91,12 +92,8 @@ async def root():
     }
 
 
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 
 # TODO: Include remaining routers as they are implemented
-# from app.api.v1 import auth, projects, ai, search, billing
-# app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-# app.include_router(projects.router, prefix="/api/v1/projects", tags=["Projects"])
-# app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
-# app.include_router(search.router, prefix="/api/v1/search", tags=["Search"])
-# app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
+# from app.api.v1 import projects, ai, search, billing
