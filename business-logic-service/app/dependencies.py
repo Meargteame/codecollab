@@ -58,11 +58,16 @@ def get_audit_context(request: Request) -> AuditContext:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> TokenPayload:
     """Validate the Bearer token and return the decoded claims.
 
+    Also checks Redis for a session revocation flag — set when a user
+    deactivates their account, changes password, or explicitly logs out.
+
     Raises:
-        HTTPException 401: If the token is missing, invalid, or expired.
+        HTTPException 401: If the token is missing, invalid, expired,
+                           or the session has been revoked.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,9 +78,20 @@ async def get_current_user(
         payload = decode_token(credentials.credentials)
         if payload.get("type") != "access":
             raise credentials_exception
-        return TokenPayload(**payload)
+        token_payload = TokenPayload(**payload)
     except (JWTError, Exception):
         raise credentials_exception
+
+    # Check Redis revocation flag — covers deactivation, password change, logout
+    revoke_key = f"revoked_user:{token_payload.sub}"
+    if await redis.exists(revoke_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return token_payload
 
 
 async def require_admin(current_user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
