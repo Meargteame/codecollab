@@ -1,18 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { users as usersApi, tokens, ApiError, AuditLogEntry } from "@/lib/api";
+import Link from "next/link";
 
-type Section = "profile" | "account" | "workspace" | "editor" | "billing" | "team" | "integrations";
+type Section = "profile" | "account" | "security" | "workspace" | "editor" | "billing" | "team" | "integrations";
+
+// Fallback audit log data shown when the API call fails
+const MOCK_AUDIT_LOGS: AuditLogEntry[] = [];
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function actionLabel(action: string) {
+  const map: Record<string, string> = {
+    "auth.login": "Signed in",
+    "auth.logout": "Signed out",
+    "auth.registered": "Account created",
+    "auth.token_refreshed": "Session refreshed",
+    "user.profile_updated": "Profile updated",
+    "user.password_changed": "Password changed",
+    "user.password_reset": "Password reset",
+    "user.email_verified": "Email verified",
+    "user.deleted": "Account deleted",
+  };
+  return map[action] ?? action;
+}
+
+function actionColor(action: string) {
+  if (action.startsWith("auth.login") || action === "auth.registered") return "text-green-400 bg-green-500/10";
+  if (action === "auth.logout") return "text-gray-400 bg-white/5";
+  if (action.includes("password")) return "text-yellow-400 bg-yellow-500/10";
+  if (action === "user.deleted") return "text-red-400 bg-red-500/10";
+  return "text-blue-400 bg-blue-500/10";
+}
 
 export default function WorkspaceSettings() {
-  const [activeSection, setActiveSection] = useState<Section>("profile");
-  const [saved, setSaved] = useState(false);
+  return (
+    <Suspense fallback={<div className="flex-1 bg-black" />}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
 
-  // Profile state
+const VALID_SECTIONS: Section[] = ["profile","account","security","workspace","editor","billing","team","integrations"];
+
+function SettingsContent() {
+  const { user, setUser } = useAuth();
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams.get("section") as Section | null;
+
+  const [activeSection, setActiveSection] = useState<Section>(
+    sectionParam && VALID_SECTIONS.includes(sectionParam) ? sectionParam : "profile"
+  );
+
+  // Sync active section whenever the URL query param changes
+  useEffect(() => {
+    if (sectionParam && VALID_SECTIONS.includes(sectionParam)) {
+      setActiveSection(sectionParam);
+    }
+  }, [sectionParam]);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Clear banners when switching sections
+  useEffect(() => {
+    setSaved(false);
+    setSaveError("");
+  }, [activeSection]);
+
+  // Profile state — populated from API via useEffect below
   const [profile, setProfile] = useState({
-    name: "Alex Johnson",
-    email: "alex@codecollab.io",
-    bio: "Full-stack developer passionate about collaborative coding",
+    name: "",
+    email: "",
+    bio: "",
     avatar: "",
   });
 
@@ -39,19 +107,115 @@ export default function WorkspaceSettings() {
     autoSave: true,
   });
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  // Security / audit log state
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOGS);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditTotal, setAuditTotal] = useState(MOCK_AUDIT_LOGS.length);
+  const [auditPage, setAuditPage] = useState(0);
+  const AUDIT_PAGE_SIZE = 5;
+  const auditPageLogs = auditLogs.slice(0, AUDIT_PAGE_SIZE);
+  const totalAuditPages = Math.ceil(auditTotal / AUDIT_PAGE_SIZE);
+
+  // Resend verification state
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  // Load user data into form on mount
+  useEffect(() => {
+    if (user) {
+      setProfile(prev => ({
+        ...prev,
+        name: user.full_name ?? "",
+        email: user.email,
+      }));
+      setEmailVerified(user.email_verified);
+    }
+  }, [user]);
+
+  // Load audit logs when Security tab is active
+  useEffect(() => {
+    if (activeSection === "security") {
+      loadAuditLogs(auditPage);
+    }
+  }, [activeSection, auditPage]);
+
+  const loadAuditLogs = async (page: number) => {
+    setAuditLoading(true);
+    try {
+      const data = await usersApi.getAuditLogs(AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE);
+      setAuditLogs(data.items);
+      setAuditTotal(data.total);
+    } catch {
+      // keep mock data on error
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendStatus("sending");
+    try {
+      await usersApi.resendVerification();
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("error");
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const updated = await usersApi.updateMe({ full_name: profile.name });
+      setUser(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (account.newPassword !== account.confirmPassword) {
+      setSaveError("New passwords do not match.");
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    try {
+      await usersApi.changePassword(account.currentPassword, account.newPassword);
+      setAccount({ currentPassword: "", newPassword: "", confirmPassword: "", twoFactorEnabled: account.twoFactorEnabled });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Failed to change password.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm("Are you sure? This permanently deletes your account and cannot be undone.")) return;
+    try {
+      await usersApi.deleteMe();
+      tokens.clear();
+      window.location.href = "/signin";
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Failed to delete account.");
+    }
   };
 
   const sections = [
-    { id: "profile" as Section, name: "Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-    { id: "account" as Section, name: "Account", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
-    { id: "workspace" as Section, name: "Workspace", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" },
-    { id: "editor" as Section, name: "Editor", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
-    { id: "billing" as Section, name: "Billing", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
-    { id: "team" as Section, name: "Team", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
-    { id: "integrations" as Section, name: "Integrations", icon: "M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" },
+    { id: "profile" as Section, name: "profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+    { id: "account" as Section, name: "account", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
+    { id: "security" as Section, name: "security", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
+    { id: "workspace" as Section, name: "workspace", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" },
+    { id: "editor" as Section, name: "editor", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
+    { id: "billing" as Section, name: "billing", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
+    { id: "team" as Section, name: "team", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
+    { id: "integrations" as Section, name: "integrations", icon: "M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" },
   ];
 
   return (
@@ -64,9 +228,10 @@ export default function WorkspaceSettings() {
         </div>
         <nav className="px-2 pb-4">
           {sections.map((section) => (
-            <button
+            <Link
+              href={`/settings?section=${section.name}`}
               key={section.id}
-              onClick={() => setActiveSection(section.id)}
+              // onClick={() => setActiveSection(section.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
                 activeSection === section.id
                   ? "text-white bg-blue-500/10 border-l-2 border-blue-500"
@@ -77,7 +242,7 @@ export default function WorkspaceSettings() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={section.icon} />
               </svg>
               {section.name}
-            </button>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -94,6 +259,15 @@ export default function WorkspaceSettings() {
             </div>
           )}
 
+          {/* Error Message */}
+          {saveError && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30">
+              <p className="text-red-400 text-sm font-bold uppercase tracking-wider">
+                ✗ {saveError}
+              </p>
+            </div>
+          )}
+
           {/* Profile Section */}
           {activeSection === "profile" && (
             <div className="space-y-6">
@@ -106,12 +280,84 @@ export default function WorkspaceSettings() {
                 <div>
                   <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-bold">Avatar</label>
                   <div className="flex items-center gap-4">
-                    <div className="w-20 h-20 bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
-                      {profile.name.charAt(0)}
+                    {/* Hidden file input */}
+                    <input
+                      type="file"
+                      id="avatar-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          setSaveError("Image must be under 2 MB.");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          const base64 = reader.result as string;
+                          setProfile(prev => ({ ...prev, avatar: base64 }));
+                          setSaving(true);
+                          setSaveError("");
+                          try {
+                            const updated = await usersApi.updateMe({ avatar_url: base64 });
+                            setUser(updated);
+                            setSaved(true);
+                            setTimeout(() => setSaved(false), 3000);
+                          } catch (err) {
+                            setSaveError(err instanceof ApiError ? err.message : "Failed to upload avatar.");
+                          } finally {
+                            setSaving(false);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                        // Reset input so same file can be re-selected
+                        e.target.value = "";
+                      }}
+                    />
+
+                    {/* Avatar preview */}
+                    {(profile.avatar || user?.avatar_url) ? (
+                      <img
+                        src={profile.avatar || user?.avatar_url || ""}
+                        alt="Avatar"
+                        className="w-20 h-20 object-cover"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
+                        {profile.name.charAt(0).toUpperCase() || "?"}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-2">
+                      <label
+                        htmlFor="avatar-upload"
+                        className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        {saving ? "Uploading..." : "Upload New"}
+                      </label>
+                      {(profile.avatar || user?.avatar_url) && (
+                        <button
+                          onClick={async () => {
+                            setProfile(prev => ({ ...prev, avatar: "" }));
+                            setSaving(true);
+                            setSaveError("");
+                            try {
+                              const updated = await usersApi.updateMe({ avatar_url: "" });
+                              setUser(updated);
+                            } catch (err) {
+                              setSaveError(err instanceof ApiError ? err.message : "Failed to remove avatar.");
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                          className="px-4 py-2 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 text-xs font-bold uppercase tracking-wider transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <p className="text-xs text-gray-600">JPG, PNG, GIF · Max 2 MB</p>
                     </div>
-                    <button className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                      Upload New
-                    </button>
                   </div>
                 </div>
 
@@ -145,8 +391,8 @@ export default function WorkspaceSettings() {
                   />
                 </div>
 
-                <button onClick={handleSave} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                  Save Changes
+                <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold uppercase tracking-wider transition-colors">
+                  {saving ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </div>
@@ -194,8 +440,8 @@ export default function WorkspaceSettings() {
                   </div>
                 </div>
 
-                <button onClick={handleSave} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                  Update Password
+                <button onClick={handleChangePassword} disabled={saving} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold uppercase tracking-wider transition-colors">
+                  {saving ? "Updating..." : "Update Password"}
                 </button>
               </div>
 
@@ -225,9 +471,140 @@ export default function WorkspaceSettings() {
                 <h3 className="text-lg font-bold text-red-400 uppercase tracking-wider">Danger Zone</h3>
                 <p className="text-sm text-gray-400">Irreversible actions</p>
                 
-                <button className="px-6 py-2 bg-red-500/10 border border-red-500/50 hover:bg-red-500 hover:border-red-500 text-red-400 hover:text-white text-sm font-bold uppercase tracking-wider transition-colors">
+                <button onClick={handleDeleteAccount} className="px-6 py-2 bg-red-500/10 border border-red-500/50 hover:bg-red-500 hover:border-red-500 text-red-400 hover:text-white text-sm font-bold uppercase tracking-wider transition-colors">
                   Delete Account
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Security Section */}
+          {activeSection === "security" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Security</h2>
+                <p className="text-gray-400 text-sm">Email verification and account activity log</p>
+              </div>
+
+              {/* Email Verification Card */}
+              <div className={`p-6 border space-y-4 ${emailVerified ? "bg-green-500/5 border-green-500/30" : "bg-yellow-500/5 border-yellow-500/30"}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 flex items-center justify-center flex-shrink-0 ${emailVerified ? "bg-green-500/10" : "bg-yellow-500/10"}`}>
+                      {emailVerified ? (
+                        <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white mb-1 uppercase tracking-wider">
+                        Email Verification
+                      </div>
+                      <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${emailVerified ? "text-green-400" : "text-yellow-400"}`}>
+                        {emailVerified ? "Verified" : "Not Verified"}
+                      </div>
+                      <div className="text-xs text-gray-500">{user?.email ?? profile.email}</div>
+                    </div>
+                  </div>
+
+                  {!emailVerified && (
+                    <button
+                      onClick={handleResendVerification}
+                      disabled={resendStatus === "sending" || resendStatus === "sent"}
+                      className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider transition-colors flex-shrink-0"
+                    >
+                      {resendStatus === "sending" && "Sending..."}
+                      {resendStatus === "sent" && "✓ Sent"}
+                      {(resendStatus === "idle" || resendStatus === "error") && "Resend Email"}
+                    </button>
+                  )}
+                </div>
+
+                {resendStatus === "sent" && (
+                  <div className="p-3 bg-green-500/10 border border-green-500/30">
+                    <p className="text-green-400 text-xs font-bold uppercase tracking-wider">
+                      ✓ Verification email sent — check your inbox
+                    </p>
+                  </div>
+                )}
+                {resendStatus === "error" && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30">
+                    <p className="text-red-400 text-xs">Failed to send. Please try again.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Audit Log */}
+              <div className="p-6 bg-white/[0.02] border border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white uppercase tracking-wider">Account Activity</h3>
+                    <p className="text-xs text-gray-500 mt-1">Recent actions on your account</p>
+                  </div>
+                  <div className="px-2 py-1 bg-white/5 border border-white/10 text-xs text-gray-400 font-bold uppercase tracking-wider">
+                    {auditLoading ? "Loading..." : `${auditTotal} events`}
+                  </div>
+                </div>
+
+                {/* Log table */}
+                <div className="space-y-1">
+                  {/* Header */}
+                  <div className="grid grid-cols-12 gap-3 px-3 py-2">
+                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">IP Address</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Device</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Time</div>
+                  </div>
+
+                  {auditPageLogs.map((log) => (
+                    <div key={log.id} className="grid grid-cols-12 gap-3 px-3 py-3 bg-white/[0.02] border border-white/10 hover:border-white/20 transition-colors">
+                      <div className="col-span-3 flex items-center">
+                        <span className={`px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${actionColor(log.action)}`}>
+                          {actionLabel(log.action)}
+                        </span>
+                      </div>
+                      <div className="col-span-3 flex items-center">
+                        <span className="text-xs text-gray-400 font-mono">{log.ip_address}</span>
+                      </div>
+                      <div className="col-span-3 flex items-center">
+                        <span className="text-xs text-gray-500 truncate">{log.user_agent}</span>
+                      </div>
+                      <div className="col-span-3 flex items-center">
+                        <span className="text-xs text-gray-500">{formatDate(log.created_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalAuditPages > 1 && (
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-gray-500">
+                      Page {auditPage + 1} of {totalAuditPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setAuditPage(p => Math.max(0, p - 1))}
+                        disabled={auditPage === 0}
+                        className="px-3 py-1 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider transition-colors"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => setAuditPage(p => Math.min(totalAuditPages - 1, p + 1))}
+                        disabled={auditPage === totalAuditPages - 1}
+                        className="px-3 py-1 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -264,7 +641,7 @@ export default function WorkspaceSettings() {
                   />
                 </div>
 
-                <button onClick={handleSave} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
+                <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 3000); }} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
                   Save Changes
                 </button>
               </div>
@@ -345,7 +722,7 @@ export default function WorkspaceSettings() {
                   </button>
                 </div>
 
-                <button onClick={handleSave} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
+                <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 3000); }} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
                   Save Preferences
                 </button>
               </div>
@@ -359,78 +736,8 @@ export default function WorkspaceSettings() {
                 <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Billing</h2>
                 <p className="text-gray-400 text-sm">Manage your subscription and payment methods</p>
               </div>
-
-              <div className="p-6 bg-white/[0.02] border border-white/10 space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider mb-4">Current Plan</h3>
-                  <div className="p-6 bg-blue-500/10 border border-blue-500/30">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <div className="text-2xl font-black text-white mb-1">PRO PLAN</div>
-                        <div className="text-sm text-gray-400">$29/month • Renews on May 15, 2024</div>
-                      </div>
-                      <button className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                        Change Plan
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-gray-500 mb-1">Projects</div>
-                        <div className="text-white font-bold">Unlimited</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500 mb-1">Storage</div>
-                        <div className="text-white font-bold">100 GB</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500 mb-1">Collaborators</div>
-                        <div className="text-white font-bold">Unlimited</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider mb-4">Payment Method</h3>
-                  <div className="p-4 bg-white/5 border border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-8 bg-white/10 flex items-center justify-center text-xs font-bold text-white">
-                        VISA
-                      </div>
-                      <div>
-                        <div className="text-sm text-white font-bold">•••• •••• •••• 4242</div>
-                        <div className="text-xs text-gray-500">Expires 12/2025</div>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                      Update
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider mb-4">Billing History</h3>
-                  <div className="space-y-2">
-                    {[
-                      { date: "Apr 15, 2024", amount: "$29.00", status: "Paid" },
-                      { date: "Mar 15, 2024", amount: "$29.00", status: "Paid" },
-                      { date: "Feb 15, 2024", amount: "$29.00", status: "Paid" },
-                    ].map((invoice, i) => (
-                      <div key={i} className="p-4 bg-white/5 border border-white/10 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="text-sm text-white">{invoice.date}</div>
-                          <div className="text-sm font-bold text-white">{invoice.amount}</div>
-                          <div className="px-2 py-1 bg-green-500/10 text-green-400 text-xs font-bold uppercase tracking-wider">
-                            {invoice.status}
-                          </div>
-                        </div>
-                        <button className="text-blue-500 hover:text-blue-400 text-sm font-bold uppercase tracking-wider transition-colors">
-                          Download
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="p-8 bg-white/[0.02] border border-white/10 text-center">
+                <p className="text-gray-500 text-sm">Billing management coming soon.</p>
               </div>
             </div>
           )}
@@ -442,52 +749,8 @@ export default function WorkspaceSettings() {
                 <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Team</h2>
                 <p className="text-gray-400 text-sm">Manage your team members and permissions</p>
               </div>
-
-              <div className="p-6 bg-white/[0.02] border border-white/10 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">Team Members (3)</h3>
-                  <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold uppercase tracking-wider transition-colors">
-                    Invite Member
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {[
-                    { name: "Alex Johnson", email: "alex@codecollab.io", role: "Owner", avatar: "A" },
-                    { name: "Sarah Chen", email: "sarah@codecollab.io", role: "Admin", avatar: "S" },
-                    { name: "Mike Davis", email: "mike@codecollab.io", role: "Member", avatar: "M" },
-                  ].map((member, i) => (
-                    <div key={i} className="p-4 bg-white/5 border border-white/10 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-blue-500 flex items-center justify-center text-white text-sm font-bold">
-                          {member.avatar}
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-white">{member.name}</div>
-                          <div className="text-xs text-gray-500">{member.email}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={member.role}
-                          disabled={member.role === "Owner"}
-                          className="px-3 py-1 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                        >
-                          <option>Owner</option>
-                          <option>Admin</option>
-                          <option>Member</option>
-                        </select>
-                        {member.role !== "Owner" && (
-                          <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="p-8 bg-white/[0.02] border border-white/10 text-center">
+                <p className="text-gray-500 text-sm">Team management coming soon.</p>
               </div>
             </div>
           )}
@@ -499,33 +762,8 @@ export default function WorkspaceSettings() {
                 <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Integrations</h2>
                 <p className="text-gray-400 text-sm">Connect external services to your workspace</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { name: "GitHub", icon: "🐙", connected: true, description: "Sync repositories and commits" },
-                  { name: "GitLab", icon: "🦊", connected: false, description: "Import projects from GitLab" },
-                  { name: "Slack", icon: "💬", connected: true, description: "Get notifications in Slack" },
-                  { name: "Discord", icon: "🎮", connected: false, description: "Connect with Discord server" },
-                ].map((integration, i) => (
-                  <div key={i} className="p-6 bg-white/[0.02] border border-white/10 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-3xl">{integration.icon}</div>
-                      <div>
-                        <div className="text-lg font-bold text-white">{integration.name}</div>
-                        <div className="text-xs text-gray-500">{integration.description}</div>
-                      </div>
-                    </div>
-                    <button
-                      className={`w-full px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${
-                        integration.connected
-                          ? "bg-red-500/10 border border-red-500/50 text-red-400 hover:bg-red-500/20"
-                          : "bg-blue-500 hover:bg-blue-600 text-white"
-                      }`}
-                    >
-                      {integration.connected ? "Disconnect" : "Connect"}
-                    </button>
-                  </div>
-                ))}
+              <div className="p-8 bg-white/[0.02] border border-white/10 text-center">
+                <p className="text-gray-500 text-sm">Integrations coming soon.</p>
               </div>
             </div>
           )}
