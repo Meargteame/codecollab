@@ -125,6 +125,7 @@ async def login(
     ctx: AuditContext = Depends(get_audit_context),
     svc: AuthService = Depends(get_auth_service),
     audit_svc: AuditService = Depends(get_audit_service),
+    redis: Redis = Depends(get_redis),
 ) -> TokenPair:
     """Authenticate with email and password and receive a token pair.
 
@@ -139,11 +140,17 @@ async def login(
 
     from app.utils.jwt import decode_token
     claims = decode_token(tokens.access_token)
+    user_id = UUID(claims["sub"])
+
+    # Clear any existing revocation flag so the freshly issued tokens work
+    revoke_key = f"revoked_user:{user_id}"
+    await redis.delete(revoke_key)
+
     await audit_svc.log(
         action="auth.login",
         resource_type="user",
-        resource_id=UUID(claims["sub"]),
-        actor_id=UUID(claims["sub"]),
+        resource_id=user_id,
+        actor_id=user_id,
         ctx=ctx,
     )
 

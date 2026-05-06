@@ -8,7 +8,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_audit_context, get_current_user, get_redis
+from app.dependencies import get_audit_context, get_current_user, get_redis, require_admin
 from app.schemas.audit_log import AuditLogPage, AuditLogResponse
 from app.schemas.auth import TokenPayload
 from app.schemas.user import (
@@ -254,3 +254,74 @@ async def get_my_audit_logs(
         limit=limit,
         offset=offset,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/users/{user_id}/deactivate  (admin only)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{user_id}/deactivate",
+    response_model=UserResponse,
+    summary="Deactivate a user account",
+    responses={
+        400: {"description": "User already deactivated or deleted"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Admin access required"},
+        404: {"description": "User not found"},
+    },
+)
+async def deactivate_user(
+    user_id: UUID,
+    current_user: TokenPayload = Depends(require_admin),
+    svc: UserService = Depends(get_user_service),
+    ctx: AuditContext = Depends(get_audit_context),
+) -> UserResponse:
+    """Deactivate a user account and immediately revoke all active sessions.
+
+    - Sets account status to `deactivated`.
+    - Writes a Redis revocation flag so all existing JWT tokens are rejected.
+    - The account can be restored via the reactivate endpoint.
+    - Requires admin role.
+    """
+    try:
+        user = await svc.deactivate(user_id, actor_id=UUID(current_user.sub), ctx=ctx)
+    except UserError as exc:
+        raise _user_error_to_http(exc)
+    return UserResponse.model_validate(user)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/users/{user_id}/reactivate  (admin only)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{user_id}/reactivate",
+    response_model=UserResponse,
+    summary="Reactivate a deactivated user account",
+    responses={
+        400: {"description": "User is not deactivated"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Admin access required"},
+        404: {"description": "User not found"},
+    },
+)
+async def reactivate_user(
+    user_id: UUID,
+    current_user: TokenPayload = Depends(require_admin),
+    svc: UserService = Depends(get_user_service),
+    ctx: AuditContext = Depends(get_audit_context),
+) -> UserResponse:
+    """Restore a previously deactivated user account.
+
+    - Sets account status back to `active`.
+    - The Redis revocation flag is NOT cleared — the user must log in
+      again to obtain fresh tokens. This is intentional: it forces
+      re-authentication after reactivation.
+    - Requires admin role.
+    """
+    try:
+        user = await svc.reactivate(user_id, actor_id=UUID(current_user.sub), ctx=ctx)
+    except UserError as exc:
+        raise _user_error_to_http(exc)
+    return UserResponse.model_validate(user)
