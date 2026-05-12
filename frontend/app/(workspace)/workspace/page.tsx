@@ -6,6 +6,8 @@ import Sidebar from "@/components/Sidebar";
 import ProjectCreationModal from "@/components/ProjectCreationModal";
 import ProjectShareModal from "@/components/ProjectShareModal";
 
+import { SiReact, SiNextdotjs, SiNodedotjs, SiPython } from "react-icons/si";
+
 export default function Workspace() {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
@@ -46,10 +48,22 @@ export default function Workspace() {
   };
 
   const templates = [
-    { name: "React + TypeScript", icon: "⚛️", description: "Modern React app with TypeScript" },
-    { name: "Node.js API", icon: "🟢", description: "Express.js REST API starter" },
-    { name: "Python Flask", icon: "🐍", description: "Flask web application" },
-    { name: "Next.js App", icon: "▲", description: "Full-stack Next.js project" },
+    {
+      id: "react-ts", name: "React + TypeScript", description: "Modern React app with TypeScript",
+      icon: <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "#20232a" }}><SiReact size={18} color="#61DAFB" /></div>
+    },
+    {
+      id: "nextjs", name: "Next.js App", description: "Full-stack Next.js project",
+      icon: <div className="w-8 h-8 rounded-md flex items-center justify-center bg-white"><SiNextdotjs size={18} color="#000" /></div>
+    },
+    {
+      id: "node-api", name: "Node.js API", description: "Express.js REST API starter",
+      icon: <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "#1a1a1a" }}><SiNodedotjs size={18} color="#339933" /></div>
+    },
+    {
+      id: "python-flask", name: "Python Flask", description: "Flask web application",
+      icon: <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "#1c2b3a" }}><SiPython size={18} color="#4B8BBE" /></div>
+    },
   ];
 
   return (
@@ -128,7 +142,7 @@ export default function Workspace() {
                     onClick={() => setIsCreateModalOpen(true)}
                     className="p-4 bg-white/[0.02] border border-white/10 hover:border-blue-500/50 transition-all text-left group"
                   >
-                    <div className="text-2xl mb-2">{template.icon}</div>
+                    <div className="mb-2">{template.icon}</div>
                     <div className="text-sm font-bold text-white mb-1">{template.name}</div>
                     <div className="text-xs text-gray-500">{template.description}</div>
                   </button>

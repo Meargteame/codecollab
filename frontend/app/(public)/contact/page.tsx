@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { contact, ApiError } from "@/lib/api";
 import PageLayout from "@/components/PageLayout";
 import FormInput from "@/components/FormInput";
 import FormTextarea from "@/components/FormTextarea";
@@ -12,20 +13,23 @@ export default function Contact() {
     subject: "",
     message: ""
   });
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
+    setStatus("sending");
+    try {
+      await contact.send(formData);
+      setStatus("sent");
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      console.error(err);
+      setStatus("error");
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.id]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.id]: e.target.value });
   };
 
   const contactMethods = [
@@ -141,10 +145,18 @@ export default function Contact() {
                 SEND US A MESSAGE
               </h2>
 
-              {submitted && (
+              {status === "sent" && (
                 <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30">
                   <p className="text-green-400 text-sm font-bold uppercase tracking-wider">
-                    ✓ Message sent successfully! We'll get back to you soon.
+                    ✓ Message sent! We'll get back to you soon.
+                  </p>
+                </div>
+              )}
+
+              {status === "error" && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30">
+                  <p className="text-red-400 text-sm font-bold uppercase tracking-wider">
+                    ✗ Something went wrong. Please try again.
                   </p>
                 </div>
               )}
@@ -191,9 +203,12 @@ export default function Contact() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm uppercase tracking-wider transition-all relative overflow-hidden group"
+                  disabled={status === "sending"}
+                  className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm uppercase tracking-wider transition-all relative overflow-hidden group"
                 >
-                  <span className="relative z-10">SEND MESSAGE</span>
+                  <span className="relative z-10">
+                    {status === "sending" ? "Sending..." : "Send Message"}
+                  </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 </button>
               </form>

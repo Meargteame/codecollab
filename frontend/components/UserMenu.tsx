@@ -45,9 +45,6 @@ export default function UserMenu() {
               initials
             )}
           </div>
-          {user && !user.email_verified && (
-            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-yellow-500 border border-black" title="Email not verified" />
-          )}
         </div>
         <svg className={`w-3 h-3 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -69,28 +66,8 @@ export default function UserMenu() {
               <div className="min-w-0">
                 <div className="text-sm font-bold text-white truncate">{user?.full_name ?? "—"}</div>
                 <div className="text-xs text-gray-500 truncate">{user?.email}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  {user && !user.email_verified && (
-                    <span className="px-1.5 py-0.5 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400 font-bold uppercase tracking-wider">
-                      Unverified
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
-
-            {user && !user.email_verified && (
-              <Link
-                href="/settings?section=security"
-                onClick={() => setIsOpen(false)}
-                className="mt-3 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span className="text-xs text-yellow-400 font-bold uppercase tracking-wider">Verify your email</span>
-              </Link>
-            )}
           </div>
 
           {/* Menu Items */}

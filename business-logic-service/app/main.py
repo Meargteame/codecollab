@@ -12,6 +12,9 @@ from app.database import close_db, init_db
 # Import routers
 from app.api.v1.auth import router as auth_router
 from app.api.v1.users import router as users_router
+from app.api.v1.contact import router as contact_router
+from app.api.v1.billing import router as billing_router
+from app.api.v1.teams import router as teams_router
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -94,6 +97,6 @@ async def root():
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
-
-# TODO: Include remaining routers as they are implemented
-# from app.api.v1 import projects, ai, search, billing
+app.include_router(contact_router, prefix="/api/v1")
+app.include_router(billing_router, prefix="/api/v1")
+app.include_router(teams_router, prefix="/api/v1")

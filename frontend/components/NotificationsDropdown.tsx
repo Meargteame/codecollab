@@ -55,13 +55,19 @@ export default function NotificationsDropdown() {
   }, []);
 
   const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const dismiss = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const clearAll = () => {
+    setNotifications([]);
   };
 
   return (
@@ -88,14 +94,24 @@ export default function NotificationsDropdown() {
                 <p className="text-xs text-gray-500 mt-0.5">{unreadCount} unread</p>
               )}
             </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="text-xs text-blue-500 hover:text-blue-400 transition-colors"
-              >
-                Mark all read
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="text-xs text-blue-500 hover:text-blue-400 transition-colors"
+                >
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Notifications List */}
@@ -107,49 +123,62 @@ export default function NotificationsDropdown() {
             ) : (
               <div>
                 {notifications.map((notification) => (
-                  <button
+                  <div
                     key={notification.id}
-                    onClick={() => markAsRead(notification.id)}
-                    className={`w-full p-4 border-b border-white/10 hover:bg-white/5 transition-colors text-left ${
+                    className={`flex items-start border-b border-white/10 ${
                       !notification.read ? 'bg-blue-500/5' : ''
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 flex items-center justify-center flex-shrink-0 ${
-                        notification.type === "mention" ? 'bg-blue-500/10' :
-                        notification.type === "invite" ? 'bg-purple-500/10' :
-                        'bg-gray-500/10'
-                      }`}>
-                        {notification.type === "mention" && (
-                          <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                          </svg>
-                        )}
-                        {notification.type === "invite" && (
-                          <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        )}
-                        {notification.type === "system" && (
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-white uppercase tracking-wider">
-                            {notification.title}
-                          </span>
-                          {!notification.read && (
-                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+                    <button
+                      onClick={() => markAsRead(notification.id)}
+                      className="flex-1 p-4 hover:bg-white/5 transition-colors text-left"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-8 h-8 flex items-center justify-center flex-shrink-0 ${
+                          notification.type === "mention" ? 'bg-blue-500/10' :
+                          notification.type === "invite" ? 'bg-purple-500/10' :
+                          'bg-gray-500/10'
+                        }`}>
+                          {notification.type === "mention" && (
+                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                            </svg>
+                          )}
+                          {notification.type === "invite" && (
+                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          )}
+                          {notification.type === "system" && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                           )}
                         </div>
-                        <p className="text-sm text-gray-400 mb-1">{notification.message}</p>
-                        <p className="text-xs text-gray-600">{notification.time}</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">
+                              {notification.title}
+                            </span>
+                            {!notification.read && (
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-400 mb-1">{notification.message}</p>
+                          <p className="text-xs text-gray-600">{notification.time}</p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={() => dismiss(notification.id)}
+                      className="p-3 text-gray-600 hover:text-red-400 transition-colors flex-shrink-0 self-start mt-1"
+                      title="Dismiss"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
