@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { users as usersApi, tokens, ApiError, AuditLogEntry } from "@/lib/api";
+import { users as usersApi, tokens, ApiError, AuditLogEntry, billing, Subscription, Invoice } from "@/lib/api";
+import TeamSection from "@/components/TeamSection";
 import Link from "next/link";
 
 type Section = "profile" | "account" | "security" | "workspace" | "editor" | "billing" | "team" | "integrations";
@@ -39,6 +40,228 @@ function actionColor(action: string) {
   if (action.includes("password")) return "text-yellow-400 bg-yellow-500/10";
   if (action === "user.deleted") return "text-red-400 bg-red-500/10";
   return "text-blue-400 bg-blue-500/10";
+}
+
+// ---------------------------------------------------------------------------
+// Billing Section Component
+// ---------------------------------------------------------------------------
+
+function BillingSection() {
+  const searchParams = useSearchParams();
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loadingBilling, setLoadingBilling] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const success = searchParams.get("success") === "true";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [sub, inv] = await Promise.all([billing.getSubscription(), billing.getInvoices()]);
+        setSubscription(sub);
+        setInvoices(inv);
+      } catch { /* ignore */ }
+      finally { setLoadingBilling(false); }
+    })();
+  }, []);
+
+  const handleUpgrade = async (plan: string) => {
+    setCheckoutLoading(plan);
+    try {
+      const { checkout_url } = await billing.createCheckout(plan);
+      window.location.href = checkout_url;
+    } catch { setCheckoutLoading(null); }
+  };
+
+  const handlePortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { portal_url } = await billing.createPortal();
+      window.location.href = portal_url;
+    } catch { setPortalLoading(false); }
+  };
+
+  const currentPlan = subscription?.plan ?? "free";
+  const isActive = subscription?.status === "active";
+
+  const plans = [
+    {
+      id: "free", name: "Starter", price: "$0", period: "/month",
+      description: "Perfect for solo developers",
+      features: ["5 active sessions", "2 GB storage", "Community support", "Basic analytics", "Public repositories"],
+      cta: "Current Plan", color: "border-white/10",
+    },
+    {
+      id: "pro", name: "Pro", price: "$29", period: "/month",
+      description: "For professional teams",
+      features: ["Unlimited sessions", "100 GB storage", "Priority support", "Advanced analytics", "Private repositories", "Custom domains", "AI copilot access"],
+      cta: "Upgrade to Pro", color: "border-blue-500", popular: true,
+    },
+    {
+      id: "enterprise", name: "Enterprise", price: "$99", period: "/month",
+      description: "For large organizations",
+      features: ["Everything in Pro", "Unlimited storage", "24/7 dedicated support", "SSO & SAML", "Custom integrations", "SLA guarantee", "On-premise deployment"],
+      cta: "Upgrade to Enterprise", color: "border-purple-500/50",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Billing</h2>
+        <p className="text-gray-400 text-sm">Manage your subscription and payment methods</p>
+      </div>
+
+      {/* Success banner */}
+      {success && (
+        <div className="p-4 bg-green-500/10 border border-green-500/30">
+          <p className="text-green-400 text-sm font-bold uppercase tracking-wider">✓ Payment successful! Your plan has been upgraded.</p>
+        </div>
+      )}
+
+      {/* Current plan summary */}
+      <div className="p-6 bg-white/[0.02] border border-white/10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-black text-white uppercase tracking-wider mb-1">Current Plan</h3>
+            {loadingBilling ? (
+              <div className="w-24 h-4 bg-white/10 animate-pulse" />
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs font-bold uppercase tracking-wider border border-blue-500/20">
+                  {currentPlan}
+                </span>
+                {isActive && subscription?.current_period_end && (
+                  <span className="text-xs text-gray-500">
+                    Renews {new Date(subscription.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          {currentPlan !== "free" && (
+            <button
+              onClick={handlePortal}
+              disabled={portalLoading}
+              className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider transition-colors"
+            >
+              {portalLoading ? "Loading..." : "Manage Subscription"}
+            </button>
+          )}
+        </div>
+
+        {/* Storage bar */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">Storage</span>
+            <span className="text-xs text-gray-400">4.2 GB / {currentPlan === "free" ? "10 GB" : currentPlan === "pro" ? "100 GB" : "Unlimited"}</span>
+          </div>
+          <div className="w-full h-1.5 bg-white/10">
+            <div className="h-full bg-blue-500" style={{ width: currentPlan === "free" ? "42%" : "8%" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Plans */}
+      <div>
+        <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4">Available Plans</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {plans.map((plan) => {
+            const isCurrent = currentPlan === plan.id;
+            return (
+              <div key={plan.id} className={`relative p-6 border transition-all ${isCurrent ? "bg-blue-500/5 border-blue-500" : `bg-white/[0.02] ${plan.color} hover:border-white/20`}`}>
+                {plan.popular && (
+                  <div className="absolute -top-px left-0 right-0 h-0.5 bg-blue-500" />
+                )}
+                {plan.popular && (
+                  <span className="absolute top-3 right-3 px-2 py-0.5 bg-blue-500 text-white text-xs font-bold uppercase tracking-wider">Popular</span>
+                )}
+                <div className="mb-4">
+                  <h4 className="text-white font-black text-lg uppercase tracking-wide mb-1">{plan.name}</h4>
+                  <p className="text-gray-500 text-xs mb-3">{plan.description}</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-white">{plan.price}</span>
+                    <span className="text-gray-500 text-xs">{plan.period}</span>
+                  </div>
+                </div>
+                <ul className="space-y-2 mb-6">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-xs text-gray-400">
+                      <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => !isCurrent && handleUpgrade(plan.id)}
+                  disabled={isCurrent || checkoutLoading !== null || plan.id === "free"}
+                  className={`w-full py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
+                    isCurrent
+                      ? "bg-blue-500/10 text-blue-400 cursor-default border border-blue-500/30"
+                      : plan.id === "free"
+                      ? "bg-white/5 text-gray-500 cursor-default border border-white/10"
+                      : "bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  {isCurrent ? "Current Plan" : checkoutLoading === plan.id ? "Redirecting..." : plan.cta}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Invoice history */}
+      <div className="bg-white/[0.02] border border-white/10">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="text-sm font-black text-white uppercase tracking-wider">Invoice History</h3>
+        </div>
+        {loadingBilling ? (
+          <div className="p-8 text-center">
+            <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 animate-spin mx-auto" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 text-sm">No invoices yet.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            <div className="grid grid-cols-4 gap-4 px-6 py-2">
+              {["Date", "Amount", "Status", ""].map((h) => (
+                <span key={h} className="text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</span>
+              ))}
+            </div>
+            {invoices.map((inv) => (
+              <div key={inv.id} className="grid grid-cols-4 gap-4 px-6 py-3 items-center hover:bg-white/[0.02] transition-colors">
+                <span className="text-sm text-white">
+                  {new Date(inv.created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </span>
+                <span className="text-sm text-white">
+                  {(inv.amount_paid / 100).toLocaleString("en-US", { style: "currency", currency: inv.currency.toUpperCase() })}
+                </span>
+                <span className={`px-2 py-0.5 text-xs font-bold uppercase tracking-wider w-fit ${inv.status === "paid" ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"}`}>
+                  {inv.status}
+                </span>
+                <div className="flex items-center gap-2 justify-end">
+                  {inv.invoice_pdf && (
+                    <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400 transition-colors font-bold uppercase tracking-wider">
+                      PDF
+                    </a>
+                  )}
+                  {inv.hosted_invoice_url && (
+                    <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-white transition-colors font-bold uppercase tracking-wider">
+                      View
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function WorkspaceSettings() {
@@ -116,10 +339,6 @@ function SettingsContent() {
   const auditPageLogs = auditLogs.slice(0, AUDIT_PAGE_SIZE);
   const totalAuditPages = Math.ceil(auditTotal / AUDIT_PAGE_SIZE);
 
-  // Resend verification state
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
-
   // Load user data into form on mount
   useEffect(() => {
     if (user) {
@@ -128,7 +347,6 @@ function SettingsContent() {
         name: user.full_name ?? "",
         email: user.email,
       }));
-      setEmailVerified(user.email_verified);
     }
   }, [user]);
 
@@ -149,16 +367,6 @@ function SettingsContent() {
       // keep mock data on error
     } finally {
       setAuditLoading(false);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    setResendStatus("sending");
-    try {
-      await usersApi.resendVerification();
-      setResendStatus("sent");
-    } catch {
-      setResendStatus("error");
     }
   };
 
@@ -483,60 +691,7 @@ function SettingsContent() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Security</h2>
-                <p className="text-gray-400 text-sm">Email verification and account activity log</p>
-              </div>
-
-              {/* Email Verification Card */}
-              <div className={`p-6 border space-y-4 ${emailVerified ? "bg-green-500/5 border-green-500/30" : "bg-yellow-500/5 border-yellow-500/30"}`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 flex items-center justify-center flex-shrink-0 ${emailVerified ? "bg-green-500/10" : "bg-yellow-500/10"}`}>
-                      {emailVerified ? (
-                        <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-white mb-1 uppercase tracking-wider">
-                        Email Verification
-                      </div>
-                      <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${emailVerified ? "text-green-400" : "text-yellow-400"}`}>
-                        {emailVerified ? "Verified" : "Not Verified"}
-                      </div>
-                      <div className="text-xs text-gray-500">{user?.email ?? profile.email}</div>
-                    </div>
-                  </div>
-
-                  {!emailVerified && (
-                    <button
-                      onClick={handleResendVerification}
-                      disabled={resendStatus === "sending" || resendStatus === "sent"}
-                      className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider transition-colors flex-shrink-0"
-                    >
-                      {resendStatus === "sending" && "Sending..."}
-                      {resendStatus === "sent" && "✓ Sent"}
-                      {(resendStatus === "idle" || resendStatus === "error") && "Resend Email"}
-                    </button>
-                  )}
-                </div>
-
-                {resendStatus === "sent" && (
-                  <div className="p-3 bg-green-500/10 border border-green-500/30">
-                    <p className="text-green-400 text-xs font-bold uppercase tracking-wider">
-                      ✓ Verification email sent — check your inbox
-                    </p>
-                  </div>
-                )}
-                {resendStatus === "error" && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30">
-                    <p className="text-red-400 text-xs">Failed to send. Please try again.</p>
-                  </div>
-                )}
+                <p className="text-gray-400 text-sm">Account activity log</p>
               </div>
 
               {/* Audit Log */}
@@ -731,28 +886,12 @@ function SettingsContent() {
 
           {/* Billing Section */}
           {activeSection === "billing" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Billing</h2>
-                <p className="text-gray-400 text-sm">Manage your subscription and payment methods</p>
-              </div>
-              <div className="p-8 bg-white/[0.02] border border-white/10 text-center">
-                <p className="text-gray-500 text-sm">Billing management coming soon.</p>
-              </div>
-            </div>
+            <BillingSection />
           )}
 
           {/* Team Section */}
           {activeSection === "team" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Team</h2>
-                <p className="text-gray-400 text-sm">Manage your team members and permissions</p>
-              </div>
-              <div className="p-8 bg-white/[0.02] border border-white/10 text-center">
-                <p className="text-gray-500 text-sm">Team management coming soon.</p>
-              </div>
-            </div>
+            <TeamSection currentUserId={user?.id ?? ""} />
           )}
 
           {/* Integrations Section */}

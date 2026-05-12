@@ -168,62 +168,6 @@ async def delete_me(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/users/verify-email
-# ---------------------------------------------------------------------------
-
-@router.post(
-    "/verify-email",
-    response_model=UserResponse,
-    summary="Verify email address",
-    responses={
-        400: {"description": "Token invalid or expired"},
-        404: {"description": "User not found"},
-    },
-)
-async def verify_email(
-    payload: VerifyEmailRequest,
-    svc: UserService = Depends(get_user_service),
-) -> UserResponse:
-    """Verify a user's email address using the signed token from the verification email.
-
-    This endpoint is public — no authentication required.
-    """
-    try:
-        user = await svc.verify_email(payload.token)
-    except UserError as exc:
-        raise _user_error_to_http(exc)
-    return UserResponse.model_validate(user)
-
-
-# ---------------------------------------------------------------------------
-# POST /api/v1/users/me/resend-verification
-# ---------------------------------------------------------------------------
-
-@router.post(
-    "/me/resend-verification",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Resend email verification token",
-    responses={
-        400: {"description": "Email already verified"},
-        401: {"description": "Not authenticated"},
-    },
-)
-async def resend_verification(
-    current_user: TokenPayload = Depends(get_current_user),
-    svc: UserService = Depends(get_user_service),
-) -> dict:
-    """Generate a new email verification token.
-
-    Returns the token directly in development so it can be tested without SMTP.
-    """
-    try:
-        token = await svc.send_verification_email(UUID(current_user.sub))
-    except UserError as exc:
-        raise _user_error_to_http(exc)
-    return {"message": "Verification email sent", "token": token}
-
-
-# ---------------------------------------------------------------------------
 # GET /api/v1/users/me/audit-logs
 # ---------------------------------------------------------------------------
 

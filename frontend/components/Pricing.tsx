@@ -34,7 +34,7 @@ export default function Pricing() {
     },
     {
       name: "Enterprise",
-      price: "Custom",
+      price: "99",
       description: "For large organizations",
       features: [
         "Everything in Pro",
@@ -45,7 +45,7 @@ export default function Pricing() {
         "SLA guarantee",
         "On-premise deployment"
       ],
-      cta: "Contact Sales",
+      cta: "Get Started",
       popular: false
     }
   ];
@@ -73,66 +73,72 @@ export default function Pricing() {
           {plans.map((plan, index) => (
             <div
               key={index}
-              className={`relative p-8 transition-all duration-300 overflow-hidden ${
+              className={`relative transition-all duration-300 overflow-hidden ${
                 plan.popular
                   ? 'bg-gradient-to-b from-blue-500/20 to-blue-500/5 border-2 border-blue-500 scale-105'
                   : 'bg-white/[0.02] border border-white/10 hover:border-white/20'
               }`}
             >
-              {/* Animated beam for popular plan */}
               {plan.popular && (
-                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-beam" />
-              )}
-              
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-blue-500">
-                  <span className="text-xs text-white font-bold uppercase tracking-wider">
-                    Most Popular
-                  </span>
+                <div className="w-full bg-blue-500 py-2 flex items-center justify-center gap-2">
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                  <span className="text-xs text-white font-black uppercase tracking-widest">Most Popular</span>
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
                 </div>
               )}
 
-              <div className="mb-8">
-                <h3 className="text-white font-bold text-2xl mb-2 uppercase tracking-wide">
-                  {plan.name}
-                </h3>
-                <p className="text-gray-500 text-sm mb-6">{plan.description}</p>
-                <div className="flex items-baseline gap-2">
-                  {plan.price === "Custom" ? (
-                    <span className="text-5xl font-black text-white">Custom</span>
-                  ) : (
-                    <>
-                      <span className="text-5xl font-black text-white">${plan.price}</span>
-                      <span className="text-gray-500 text-sm">/month</span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <ul className="space-y-4 mb-8">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm text-gray-400">
-                    <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href={plan.cta === "Contact Sales" ? "/contact" : "/signup"}
-                className={`block w-full py-3 font-bold text-sm uppercase tracking-wider transition-all overflow-hidden group relative text-center ${
-                  plan.popular
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'
-                }`}
-              >
-                <span className="relative z-10">{plan.cta}</span>
+              <div className="p-8">
+                {/* Animated beam for popular plan */}
                 {plan.popular && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  <div className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-white/30 to-transparent animate-beam" />
                 )}
-              </Link>
+
+                <div className="mb-8">
+                  <h3 className="text-white font-bold text-2xl mb-2 uppercase tracking-wide">
+                    {plan.name}
+                  </h3>
+                  <p className="text-gray-500 text-sm mb-6">{plan.description}</p>
+                  <div className="flex items-baseline gap-2">
+                    {plan.price === "Custom" ? (
+                      <span className="text-5xl font-black text-white">Custom</span>
+                    ) : (
+                      <>
+                        <span className="text-5xl font-black text-white">${plan.price}</span>
+                        <span className="text-gray-500 text-sm">/month</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-gray-400">
+                      <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  href={plan.cta === "Contact Sales" ? "/contact" : "/signup"}
+                  className={`block w-full py-3 font-bold text-sm uppercase tracking-wider transition-all overflow-hidden group relative text-center ${
+                    plan.popular
+                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                      : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'
+                  }`}
+                >
+                  <span className="relative z-10">{plan.cta}</span>
+                  {plan.popular && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  )}
+                </Link>
+              </div>
             </div>
           ))}
         </div>

@@ -9,6 +9,7 @@ from app.models.chat_message import ChatMessage
 from app.models.subscription import Subscription
 from app.models.usage_metric import UsageMetric
 from app.models.audit_log import AuditLog
+from app.models.team import Team, TeamMember
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "Subscription",
     "UsageMetric",
     "AuditLog",
+    "Team",
+    "TeamMember",
 ]

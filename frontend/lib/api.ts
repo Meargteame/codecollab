@@ -177,20 +177,123 @@ export const users = {
       body: JSON.stringify({ current_password, new_password }),
     }),
 
-  verifyEmail: (token: string) =>
-    request<UserProfile>("/api/v1/users/verify-email", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    }),
-
-  resendVerification: () =>
-    request<{ message: string; token?: string }>(
-      "/api/v1/users/me/resend-verification",
-      { method: "POST" }
-    ),
-
   getAuditLogs: (limit = 50, offset = 0) =>
     request<AuditLogPage>(
       `/api/v1/users/me/audit-logs?limit=${limit}&offset=${offset}`
     ),
+};
+
+// ---------------------------------------------------------------------------
+// Contact endpoint
+// ---------------------------------------------------------------------------
+
+export const contact = {
+  send: (data: { name: string; email: string; subject: string; message: string }) =>
+    request<{ detail: string }>("/api/v1/contact", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Billing endpoints
+// ---------------------------------------------------------------------------
+
+export interface Subscription {
+  id: string;
+  plan: string;
+  status: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  amount_paid: number;
+  currency: string;
+  status: string;
+  created: string;
+  invoice_pdf: string | null;
+  hosted_invoice_url: string | null;
+  description: string | null;
+}
+
+export const billing = {
+  getSubscription: () =>
+    request<Subscription | null>("/api/v1/billing/subscription"),
+
+  createCheckout: (plan: string) =>
+    request<{ checkout_url: string }>("/api/v1/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        plan,
+        success_url: `${window.location.origin}/settings?section=billing&success=true`,
+        cancel_url: `${window.location.origin}/settings?section=billing`,
+      }),
+    }),
+
+  createPortal: () =>
+    request<{ portal_url: string }>("/api/v1/billing/portal", { method: "POST" }),
+
+  getInvoices: () =>
+    request<Invoice[]>("/api/v1/billing/invoices"),
+};
+
+// ---------------------------------------------------------------------------
+// Team endpoints
+// ---------------------------------------------------------------------------
+
+export interface Team {
+  id: string;
+  name: string;
+  owner_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role: string;
+  joined_at: string;
+  email: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+}
+
+export const teams = {
+  list: () =>
+    request<Team[]>("/api/v1/teams"),
+
+  create: (name: string) =>
+    request<Team>("/api/v1/teams", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
+  delete: (teamId: string) =>
+    request<void>(`/api/v1/teams/${teamId}`, { method: "DELETE" }),
+
+  listMembers: (teamId: string) =>
+    request<TeamMember[]>(`/api/v1/teams/${teamId}/members`),
+
+  addMember: (teamId: string, email: string, role: string) =>
+    request<TeamMember>(`/api/v1/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
+
+  updateRole: (teamId: string, userId: string, role: string) =>
+    request<TeamMember>(`/api/v1/teams/${teamId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeMember: (teamId: string, userId: string) =>
+    request<void>(`/api/v1/teams/${teamId}/members/${userId}`, { method: "DELETE" }),
 };

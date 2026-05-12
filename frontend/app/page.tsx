@@ -11,6 +11,7 @@ import TrustedBy from "@/components/TrustedBy";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
 import FeatureSection from "@/components/FeatureSection";
+import { contact, ApiError } from "@/lib/api";
 import FormInput from "@/components/FormInput";
 import FormTextarea from "@/components/FormTextarea";
 
@@ -18,21 +19,26 @@ export default function Home() {
   const [contactForm, setContactForm] = useState({
     name: "",
     email: "",
+    subject: "",
     message: ""
   });
-  const [submitted, setSubmitted] = useState(false);
+  const [contactStatus, setContactStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
+    setContactStatus("sending");
+    try {
+      await contact.send(contactForm);
+      setContactStatus("sent");
+      setContactForm({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      console.error(err);
+      setContactStatus("error");
+    }
   };
 
   const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setContactForm({
-      ...contactForm,
-      [e.target.id]: e.target.value
-    });
+    setContactForm({ ...contactForm, [e.target.id]: e.target.value });
   };
 
   return (
@@ -233,10 +239,18 @@ export default function Home() {
           <div className="p-8 bg-white/[0.02] border border-white/10 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
             
-            {submitted && (
+            {contactStatus === "sent" && (
               <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30">
                 <p className="text-green-400 text-sm font-bold uppercase tracking-wider">
                   ✓ Message sent! We'll get back to you soon.
+                </p>
+              </div>
+            )}
+
+            {contactStatus === "error" && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30">
+                <p className="text-red-400 text-sm font-bold uppercase tracking-wider">
+                  ✗ Something went wrong. Please try again.
                 </p>
               </div>
             )}
@@ -262,6 +276,15 @@ export default function Home() {
                 />
               </div>
 
+              <FormInput
+                label="SUBJECT"
+                id="subject"
+                value={contactForm.subject}
+                onChange={handleContactChange}
+                placeholder="How can we help?"
+                required
+              />
+
               <FormTextarea
                 label="MESSAGE"
                 id="message"
@@ -274,9 +297,12 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm uppercase tracking-wider transition-all relative overflow-hidden group"
+                disabled={contactStatus === "sending"}
+                className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm uppercase tracking-wider transition-all relative overflow-hidden group"
               >
-                <span className="relative z-10">SEND MESSAGE</span>
+                <span className="relative z-10">
+                  {contactStatus === "sending" ? "Sending..." : "Send Message"}
+                </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
               </button>
             </form>
